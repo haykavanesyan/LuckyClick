@@ -1,39 +1,59 @@
+// bot.js
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
-const fs = require('fs');
+const mongoose = require('mongoose');
+
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const TON_WALLET = process.env.TON_WALLET;
-const ADMIN_ID = process.env.ADMIN_ID;
+const COOLDOWN = {}; // { userId: { command: timestamp } }
 const ROOM_TYPES = { '100': [], '300': [], '500': [], '1000': [] };
 
-let balances = {};
-let processedTxs = {};
-const TXHASH_FILE = 'txhashes.json';
-const BALANCE_FILE = 'balances.json';
-const COOLDOWN = {}; // { userId: timestamp }
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('✅ MongoDB connected'))
+    .catch(err => console.error('❌ MongoDB connection error:', err));
 
-try {
-    if (fs.existsSync(TXHASH_FILE)) {
-        processedTxs = JSON.parse(fs.readFileSync(TXHASH_FILE));
+// Schemas
+const { Schema, model } = mongoose;
+
+const userSchema = new Schema({
+    userId: { type: Number, required: true, unique: true },
+    balance: { type: Number, default: 0 }
+});
+const txSchema = new Schema({ userId: Number, txHash: String });
+
+const User = model('User', userSchema);
+const TxHash = model('TxHash', txSchema);
+
+async function getBalance(userId) {
+    const user = await User.findOne({ userId });
+    return user ? user.balance : 0;
+}
+
+async function updateBalance(userId, amount) {
+    const user = await User.findOneAndUpdate(
+        { userId },
+        { $inc: { balance: amount } },
+        { new: true, upsert: true }
+    );
+    return user.balance;
+}
+
+async function isTxProcessed(userId, txHash) {
+    const exists = await TxHash.findOne({ userId, txHash });
+    if (exists) return true;
+    await TxHash.create({ userId, txHash });
+    return false;
+}
+
+function checkCooldown(userId, command, ctx) {
+    const now = Date.now();
+    if (!COOLDOWN[userId]) COOLDOWN[userId] = {};
+    if (!COOLDOWN[userId][command] || now - COOLDOWN[userId][command] > 60000) {
+        COOLDOWN[userId][command] = now;
+        return false;
     }
-} catch (err) {
-    console.error('Ошибка загрузки txhashes.json:', err);
-}
-
-try {
-    if (fs.existsSync(BALANCE_FILE)) {
-        balances = JSON.parse(fs.readFileSync(BALANCE_FILE));
-    }
-} catch (err) {
-    console.error('Ошибка загрузки balances.json:', err);
-}
-
-function saveBalances() {
-    fs.writeFileSync(BALANCE_FILE, JSON.stringify(balances, null, 2));
-}
-
-function getBalance(userId) {
-    return balances[userId] || 0;
+    ctx.reply('⏳ Подождите немного перед повторной попыткой.');
+    return true;
 }
 
 function createRoom(stake) {
@@ -53,7 +73,7 @@ function notifyRoomPlayers(room, text) {
     room.joined.forEach(id => bot.telegram.sendMessage(id, text));
 }
 
-function endGame(room, ctx) {
+async function endGame(room) {
     if (!room.inProgress) return;
     const greenCount = room.green.length;
     const redCount = room.red.length;
@@ -65,20 +85,14 @@ function endGame(room, ctx) {
     if (greenCount < redCount) { winners = room.green; winColor = 'Green'; }
     else if (redCount < greenCount) { winners = room.red; winColor = 'Red'; }
     else {
-        room.green.concat(room.red).forEach(userId => {
-            balances[userId] += room.stake;
-        });
-        saveBalances();
+        await Promise.all(room.green.concat(room.red).map(id => updateBalance(id, room.stake)));
         notifyRoomPlayers(room, `[${room.id}] Ничья! Ставки возвращены.`);
         return resetRoom(room);
     }
 
     const reward = Math.floor(rewardPool / (winners.length || 1));
-    winners.forEach(userId => {
-        balances[userId] += reward;
-    });
-    saveBalances();
-    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому победителю. Победителей: ${winners.length}`);
+    await Promise.all(winners.map(id => updateBalance(id, reward)));
+    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.length}`);
     resetRoom(room);
 }
 
@@ -92,19 +106,9 @@ function resetRoom(room) {
     room.timerStarted = false;
 }
 
-function checkCooldown(userId, command, ctx) {
-    const now = Date.now();
-    if (!COOLDOWN[userId]) COOLDOWN[userId] = {};
-    if (!COOLDOWN[userId][command] || now - COOLDOWN[userId][command] > 60000) {
-        COOLDOWN[userId][command] = now;
-        return false;
-    }
-    ctx.reply('⏳ Подождите немного перед повторной попыткой.');
-    return true;
-}
-
+// Бот
 bot.start((ctx) => {
-    ctx.reply('🎮 Добро пожаловать в LuckyClick \n1 TON = 1000 монет\nВыберите действие:',
+    ctx.reply('🎮 Добро пожаловать в LuckyClick!\n1 TON = 1000 монет\nВыберите действие:',
         Markup.keyboard([
             ['🟢 Войти в комнату', '💰 Баланс'],
             ['➕ Пополнить', '📤 Вывести']
@@ -112,8 +116,9 @@ bot.start((ctx) => {
     );
 });
 
-bot.hears('💰 Баланс', (ctx) => {
-    ctx.reply(`Ваш баланс: ${getBalance(ctx.from.id)} монет (1 TON = 1000 монет)`);
+bot.hears('💰 Баланс', async (ctx) => {
+    const balance = await getBalance(ctx.from.id);
+    ctx.reply(`Ваш баланс: ${balance} монет (1 TON = 1000 монет)`);
 });
 
 bot.hears('🟢 Войти в комнату', (ctx) => {
@@ -128,48 +133,49 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
 });
 
 ['100', '300', '500', '1000'].forEach(stake => {
-    bot.action(`join_${stake}`, (ctx) => {
+    bot.action(`join_${stake}`, async (ctx) => {
         const userId = ctx.from.id;
         const room = findAvailableRoom(stake);
         if (room.joined.includes(userId)) return ctx.answerCbQuery('Вы уже в этой комнате');
+
         room.joined.push(userId);
-        bot.telegram.sendMessage(userId, `Вы вошли в комнату [${room.id}]. Сделайте ставку:`,
+        await bot.telegram.sendMessage(userId, `Вы вошли в комнату [${room.id}]. Сделайте ставку:`,
             Markup.inlineKeyboard([
                 [Markup.button.callback('Зелёная', `bet_green_${room.id}`)],
                 [Markup.button.callback('Красная', `bet_red_${room.id}`)],
                 [Markup.button.callback('🚪 Выйти', `leave_${room.id}`)]
             ])
         );
+
         if (room.joined.length === 1 && !room.inProgress && !room.timerStarted) {
-            bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Игра начнётся, когда будет хотя бы 2 участника.`);
+            await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 2 участника.`);
         } else if (room.joined.length >= 2 && !room.inProgress && !room.timerStarted) {
             room.timerStarted = true;
-            notifyRoomPlayers(room, `[${room.id}] Таймер: 30 сек до завершения ставок! Сделайте вашу ставку.`);
+            notifyRoomPlayers(room, `[${room.id}] Таймер: 30 сек до завершения ставок!`);
             room.timeout = setTimeout(() => {
                 room.inProgress = true;
-                endGame(room, ctx);
+                endGame(room);
             }, 30000);
-        } else if (room.timerStarted) {
-            const timeLeft = Math.ceil((room.timeout._idleStart + room.timeout._idleTimeout - Date.now()) / 1000);
-            bot.telegram.sendMessage(userId, `[${room.id}] Игра скоро начнётся! У вас есть ${timeLeft} сек чтобы сделать ставку.`);
         }
     });
 });
 
 ['green', 'red'].forEach(color => {
-    bot.action(new RegExp(`^bet_${color}_(.+)$`), (ctx) => {
+    bot.action(new RegExp(`^bet_${color}_(.+)$`), async (ctx) => {
         const userId = ctx.from.id;
         const roomId = ctx.match[1];
         const stake = roomId.split('_')[0];
         const room = ROOM_TYPES[stake].find(r => r.id === roomId);
         if (!room || !room.joined.includes(userId)) return ctx.reply('Вы не в этой комнате.');
         if (room.inProgress) return ctx.reply('Игра уже началась.');
-        if (room.green.includes(userId)) return ctx.reply('Вы уже выбрали зелёный. Нельзя изменить цвет.');
-        if (room.red.includes(userId)) return ctx.reply('Вы уже выбрали красный. Нельзя изменить цвет.');
-        if (getBalance(userId) < room.stake) return ctx.reply('Недостаточно монет для ставки.');
-        balances[userId] -= room.stake;
+        if (room.green.includes(userId)) return ctx.reply('Вы уже выбрали зелёный.');
+        if (room.red.includes(userId)) return ctx.reply('Вы уже выбрали красный.');
+
+        const balance = await getBalance(userId);
+        if (balance < room.stake) return ctx.reply('Недостаточно монет.');
+
+        await updateBalance(userId, -room.stake);
         room[color].push(userId);
-        saveBalances();
         ctx.reply(`[${room.id}] Ставка принята: ${color}`);
     });
 });
@@ -187,13 +193,9 @@ bot.action(/^leave_(.+)$/, (ctx) => {
 });
 
 bot.hears('➕ Пополнить', (ctx) => {
-    ctx.reply(`Переведите TON на адрес:`).then(() => {
-        ctx.reply(`${TON_WALLET}`).then(() => {
-            ctx.reply(`В поле комментарий напишите: ${ctx.from.id}`).then(() => {
-                ctx.reply(`После оплаты введите /checkton`);
-            })
-        })
-    })
+    ctx.reply(`Переведите TON на адрес:`);
+    ctx.reply(process.env.TON_WALLET);
+    ctx.reply(`Комментарий: ${ctx.from.id}\nПосле оплаты введите /checkton`);
 });
 
 bot.command('checkton', async (ctx) => {
@@ -201,65 +203,53 @@ bot.command('checkton', async (ctx) => {
     if (checkCooldown(userId, 'checkton', ctx)) return;
 
     try {
-        const response = await fetch(`https://toncenter.com/api/v2/getTransactions?address=${TON_WALLET}&limit=20`, {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const response = await fetch(`${process.env.TON_API}/getTransactions?address=${process.env.TON_WALLET}&limit=20`);
         const data = await response.json();
         const txs = data.result;
-        const found = txs.find(tx => tx.in_msg && tx.in_msg.source && tx.in_msg.message && tx.in_msg.message.includes(userId.toString()));
-        if (found) {
-            const tonAmount = found.in_msg.value / 1e9;
-            if (tonAmount < 0.1) return ctx.reply('Минимальная сумма пополнения — 0.1 TON');
+        const tx = txs.find(t => t.in_msg?.message?.includes(userId.toString()));
+        if (!tx) return ctx.reply('Перевод не найден.');
 
-            const txHash = found.transaction_id.hash;
-            if (!processedTxs[userId]) processedTxs[userId] = [];
-            if (processedTxs[userId].includes(txHash)) return ctx.reply('Этот перевод уже был зачислен ранее.');
-            const credit = Math.floor(tonAmount * 1000);
-            balances[userId] = getBalance(userId) + credit;
-            saveBalances();
-            processedTxs[userId].push(txHash);
-            fs.writeFileSync(TXHASH_FILE, JSON.stringify(processedTxs, null, 2));
-            console.log(`✅ [${new Date().toISOString()}] Пользователь ${userId} пополнил баланс на ${credit} монет (≈ ${tonAmount} TON).`);
-            return ctx.reply(`Баланс пополнен на ${credit} монет (≈ ${tonAmount} TON). Текущий баланс: ${balances[userId]}`);
-        } else {
-            return ctx.reply('Перевод не найден. Убедитесь, что вы указали комментарий и сумма соответствует.');
-        }
+        const txHash = tx.transaction_id.hash;
+        const already = await isTxProcessed(userId, txHash);
+        if (already) return ctx.reply('Этот перевод уже был зачислен.');
+
+        const tonAmount = tx.in_msg.value / 1e9;
+        if (tonAmount < 0.1) return ctx.reply('Минимум — 0.1 TON');
+
+        const credit = Math.floor(tonAmount * 1000);
+        const newBalance = await updateBalance(userId, credit);
+        ctx.reply(`Баланс пополнен на ${credit} монет. Текущий: ${newBalance}`);
     } catch (e) {
         console.error(e);
-        return ctx.reply('Ошибка при проверке перевода. Попробуйте позже.');
+        ctx.reply('Ошибка при проверке TON.');
     }
 });
 
 bot.hears('📤 Вывести', (ctx) => {
-    ctx.reply('Введите команду /withdraw СУММА TON_АДРЕС (1 TON = 1000 монет)');
+    ctx.reply('Введите команду: /withdraw СУММА TON_АДРЕС');
 });
 
-bot.command('withdraw', (ctx) => {
+bot.command('withdraw', async (ctx) => {
     const userId = ctx.from.id;
     if (checkCooldown(userId, 'withdraw', ctx)) return;
 
     const parts = ctx.message.text.trim().split(' ');
     const amount = parseInt(parts[1]);
     const tonAddress = parts[2];
-    if (!amount || amount <= 0) return ctx.reply('❗ Укажите корректную сумму и Ваш TON адрес: /withdraw СУММА TON_АДРЕС');
-    if (!tonAddress) return ctx.reply('❗ Укажите TON адрес: /withdraw СУММА TON_АДРЕС');
-    if (getBalance(userId) < amount) return ctx.reply('Недостаточно средств.');
 
-    balances[userId] -= amount;
-    saveBalances();
+    if (!amount || !tonAddress) return ctx.reply('Формат: /withdraw СУММА TON_АДРЕС');
 
-    const logEntry = `📤 [${new Date().toISOString()}] Пользователь ${userId} (${ctx.from.first_name}) запросил вывод ${amount} монет (≈ ${amount / 1000} TON) на ${tonAddress}. Остаток: ${balances[userId]}\n`;
-    fs.appendFileSync('transactions.log', logEntry);
-    console.log(logEntry.trim());
+    const balance = await getBalance(userId);
+    if (balance < amount) return ctx.reply('Недостаточно средств.');
 
-    ctx.reply(`✅ Заявка на вывод отправлена администратору. Баланс: ${balances[userId]} монет.`);
+    await updateBalance(userId, -amount);
+    ctx.reply(`Заявка на вывод ${amount / 1000} TON принята. Ожидайте перевода.`);
 
-    // 📬 Отправка админу
-    bot.telegram.sendMessage(
-        ADMIN_ID,
-        `📤 Заявка на вывод:\n\n👤 Пользователь: ${ctx.from.first_name} (ID: ${userId})\n💸 Сумма: ${amount} монет (≈ ${amount / 1000} TON)\n📮 Адрес: ${tonAddress}\n🕒 Время: ${new Date().toLocaleString()}`
+    await bot.telegram.sendMessage(
+        process.env.ADMIN_ID,
+        `📤 Заявка на вывод:\n👤 ${ctx.from.first_name} (${userId})\n💸 ${amount} монет (≈ ${amount / 1000} TON)\n📮 ${tonAddress}`
     );
 });
 
 bot.launch();
-console.log('Bot is running...');
+console.log('🤖 Бот запущен...');
