@@ -141,8 +141,8 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
         room.joined.push(userId);
         await bot.telegram.sendMessage(userId, `Вы вошли в комнату [${room.id}]. Сделайте ставку:`,
             Markup.inlineKeyboard([
-                [Markup.button.callback('Зелёная', `bet_green_${room.id}`)],
-                [Markup.button.callback('Красная', `bet_red_${room.id}`)],
+                [Markup.button.callback('🟢 Зелёная', `bet_green_${room.id}`)],
+                [Markup.button.callback('🔴 Красная', `bet_red_${room.id}`)],
                 [Markup.button.callback('🚪 Выйти', `leave_${room.id}`)]
             ])
         );
