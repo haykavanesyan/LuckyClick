@@ -70,7 +70,11 @@ function findAvailableRoom(stake) {
 }
 
 function notifyRoomPlayers(room, text) {
-    room.joined.forEach(id => bot.telegram.sendMessage(id, text));
+    room.joined.forEach(id => {
+        if (!id.toString().startsWith('bot_')) {
+            bot.telegram.sendMessage(id, text)
+        }
+    });
 }
 
 async function endGame(room) {
