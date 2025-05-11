@@ -193,9 +193,11 @@ bot.action(/^leave_(.+)$/, (ctx) => {
 });
 
 bot.hears('➕ Пополнить', (ctx) => {
-    ctx.reply(`Переведите TON на адрес:`);
-    ctx.reply(process.env.TON_WALLET);
-    ctx.reply(`Комментарий: ${ctx.from.id}\nПосле оплаты введите /checkton`);
+    ctx.reply(`Переведите TON на адрес:`).then(() => {
+        ctx.reply(process.env.TON_WALLET).then(() => {
+            ctx.reply(`В отделе комментарий напишите: ${ctx.from.id}\nПосле оплаты введите /checkton`);
+        })
+    })
 });
 
 bot.command('checkton', async (ctx) => {
