@@ -147,8 +147,8 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
             ])
         );
 
-        if (room.joined.length === 1 && !room.inProgress && !room.timerStarted) {
-            await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 2 участника.`);
+        if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
+            await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
         } else if (room.joined.length >= 2 && !room.inProgress && !room.timerStarted) {
             room.timerStarted = true;
             notifyRoomPlayers(room, `[${room.id}] Таймер: 30 сек до завершения ставок!`);
