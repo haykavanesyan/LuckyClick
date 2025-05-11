@@ -3,6 +3,7 @@ const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const TON_WALLET = process.env.TON_WALLET;
+const ADMIN_ID = process.env.ADMIN_ID;
 const ROOM_TYPES = { '100': [], '300': [], '500': [], '1000': [] };
 
 let balances = {};
@@ -243,12 +244,21 @@ bot.command('withdraw', (ctx) => {
     if (!amount || amount <= 0) return ctx.reply('❗ Укажите корректную сумму и Ваш TON адрес: /withdraw СУММА TON_АДРЕС');
     if (!tonAddress) return ctx.reply('❗ Укажите TON адрес: /withdraw СУММА TON_АДРЕС');
     if (getBalance(userId) < amount) return ctx.reply('Недостаточно средств.');
+
     balances[userId] -= amount;
     saveBalances();
-    const log = `📤 [${new Date().toISOString()}] Пользователь ${userId} запросил вывод ${amount} монет (≈ ${amount / 1000} TON) на ${tonAddress}. Остаток: ${balances[userId]}\n`;
-    fs.appendFileSync('transactions.log', log);
-    console.log(log.trim());
-    ctx.reply(`✅ Заявка на вывод ${amount / 1000} TON принята. Средства будут переведены на ${tonAddress} в течение 24 часов. Текущий баланс: ${balances[userId]} монет.`);
+
+    const logEntry = `📤 [${new Date().toISOString()}] Пользователь ${userId} (${ctx.from.first_name}) запросил вывод ${amount} монет (≈ ${amount / 1000} TON) на ${tonAddress}. Остаток: ${balances[userId]}\n`;
+    fs.appendFileSync('transactions.log', logEntry);
+    console.log(logEntry.trim());
+
+    ctx.reply(`✅ Заявка на вывод отправлена администратору. Баланс: ${balances[userId]} монет.`);
+
+    // 📬 Отправка админу
+    bot.telegram.sendMessage(
+        ADMIN_ID,
+        `📤 Заявка на вывод:\n\n👤 Пользователь: ${ctx.from.first_name} (ID: ${userId})\n💸 Сумма: ${amount} монет (≈ ${amount / 1000} TON)\n📮 Адрес: ${tonAddress}\n🕒 Время: ${new Date().toLocaleString()}`
+    );
 });
 
 bot.launch();
