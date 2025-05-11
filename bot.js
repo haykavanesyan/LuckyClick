@@ -191,8 +191,6 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
                         room.inProgress = true;
                         endGame(room);
                     }, 30000);
-
-                    notifyRoomPlayers(room, `[${room.id}] Таймер: 30 сек до завершения ставок!`);
                 }
             }, 10000);
         } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
