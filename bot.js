@@ -248,6 +248,27 @@ bot.hears('➕ Пополнить', (ctx) => {
     })
 });
 
+bot.command('confirmwithdraw', async (ctx) => {
+    if (ctx.from.id.toString() !== process.env.ADMIN_ID) return ctx.reply('⛔ Только администратор может использовать эту команду.');
+
+    const parts = ctx.message.text.split(' ');
+    if (parts.length < 4) return ctx.reply('❗ Используй формат: /confirmwithdraw userId amount ton_address');
+
+    const userId = parseInt(parts[1]);
+    const amount = parseInt(parts[2]);
+    const tonAddress = parts[3];
+
+    if (!userId || !amount || !tonAddress) return ctx.reply('❗ Неверный формат. Пример: /confirmwithdraw 123456789 1000 EQ...');
+
+    try {
+        await bot.telegram.sendMessage(userId, `✅ На ваш TON-адрес ${tonAddress} выведено ${amount} монет (≈ ${amount / 1000} TON).`);
+        ctx.reply('📬 Уведомление отправлено пользователю.');
+    } catch (err) {
+        console.error('Ошибка отправки сообщения пользователю:', err);
+        ctx.reply('❌ Не удалось отправить сообщение пользователю.');
+    }
+});
+
 bot.command('checkton', async (ctx) => {
     const userId = ctx.from.id;
     if (checkCooldown(userId, 'checkton', ctx)) return;
