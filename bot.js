@@ -188,7 +188,7 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
                     const color2 = Math.random() < 0.5 ? 'green' : 'red';
                     room[color1].push(bot1);
                     room[color2].push(bot2);
-                    notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
+                    notifyRoomPlayers(room, `[${room.id}] Игра началась! 30 сек до завершения ставок!`);
 
                     room.timerStarted = true;
                     room.timeout = setTimeout(() => {
@@ -199,7 +199,7 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
             }, 10000);
         } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
             room.timerStarted = true;
-            notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
+            notifyRoomPlayers(room, `[${room.id}] Игра началась! 30 сек до завершения ставок!`);
             room.timeout = setTimeout(() => {
                 room.inProgress = true;
                 endGame(room);
