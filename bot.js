@@ -48,7 +48,7 @@ async function isTxProcessed(userId, txHash) {
 function checkCooldown(userId, command, ctx) {
     const now = Date.now();
     if (!COOLDOWN[userId]) COOLDOWN[userId] = {};
-    if (!COOLDOWN[userId][command] || now - COOLDOWN[userId][command] > 60000) {
+    if (!COOLDOWN[userId][command] || now - COOLDOWN[userId][command] > 30000) {
         COOLDOWN[userId][command] = now;
         return false;
     }
@@ -175,13 +175,32 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
 
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
             await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
-        } else if (room.joined.length >= 2 && !room.inProgress && !room.timerStarted) {
+        } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
             room.timerStarted = true;
-            notifyRoomPlayers(room, `[${room.id}] Таймер: 30 сек до завершения ставок!`);
+            notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
             room.timeout = setTimeout(() => {
                 room.inProgress = true;
                 endGame(room);
             }, 30000);
+        }
+
+        // 🤖 Добавляем ботов, если менее 3 игроков
+        if (!room.timerStarted) {
+            room.timerStarted = true;
+            room.timeout = setTimeout(() => {
+                if (room.joined.length < 3) {
+                    const bot1 = `bot_${Date.now()}_1`;
+                    const bot2 = `bot_${Date.now()}_2`;
+                    room.joined.push(bot1, bot2);
+                    const color1 = Math.random() < 0.5 ? 'green' : 'red';
+                    const color2 = Math.random() < 0.5 ? 'green' : 'red';
+                    room[color1].push(bot1);
+                    room[color2].push(bot2);
+                    notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
+                }
+                room.inProgress = true;
+                endGame(room);
+            }, 10000);
         }
     });
 });
