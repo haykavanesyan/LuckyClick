@@ -92,7 +92,7 @@ async function endGame(room) {
 
     const reward = Math.floor(rewardPool / (winners.length || 1));
     await Promise.all(winners.map(id => updateBalance(id, reward)));
-    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.length}`);
+    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.length || 1}`);
     resetRoom(room);
 }
 
@@ -175,20 +175,8 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
 
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
             await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
-        } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
-            room.timerStarted = true;
-            notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
-            room.timeout = setTimeout(() => {
-                room.inProgress = true;
-                endGame(room);
-            }, 30000);
-        }
-
-        // 🤖 Добавляем ботов, если менее 3 игроков
-        if (!room.timerStarted) {
-            room.timerStarted = true;
-            room.timeout = setTimeout(() => {
-                if (room.joined.length < 3) {
+            setTimeout(() => {
+                if (room.joined.length < 3 && !room.inProgress) {
                     const bot1 = `bot_${Date.now()}_1`;
                     const bot2 = `bot_${Date.now()}_2`;
                     room.joined.push(bot1, bot2);
@@ -197,10 +185,23 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
                     room[color1].push(bot1);
                     room[color2].push(bot2);
                     notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
+
+                    room.timerStarted = true;
+                    room.timeout = setTimeout(() => {
+                        room.inProgress = true;
+                        endGame(room);
+                    }, 30000);
+
+                    notifyRoomPlayers(room, `[${room.id}] Таймер: 30 сек до завершения ставок!`);
                 }
+            }, 10000);
+        } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
+            room.timerStarted = true;
+            notifyRoomPlayers(room, `[${room.id}] Игра началась! Таймер: 30 сек до завершения ставок!`);
+            room.timeout = setTimeout(() => {
                 room.inProgress = true;
                 endGame(room);
-            }, 10000);
+            }, 30000);
         }
     });
 });
