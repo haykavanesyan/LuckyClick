@@ -245,7 +245,7 @@ bot.command('withdraw', async (ctx) => {
     if (balance < amount) return ctx.reply('Недостаточно средств.');
 
     await updateBalance(userId, -amount);
-    ctx.reply(`Заявка на вывод ${amount / 1000} TON принята. Ожидайте перевода.`);
+    ctx.reply(`Заявка на вывод ${amount / 1000} TON принята. Ожидайте перевода в течение 24 часов.`);
 
     await bot.telegram.sendMessage(
         process.env.ADMIN_ID,
