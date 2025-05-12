@@ -299,11 +299,28 @@ bot.action(/^leave_(.+)$/, (ctx) => {
 });
 
 bot.hears('➕ Пополнить', (ctx) => {
-    ctx.reply(`Переведите TON на адрес:`).then(() => {
-        ctx.reply(process.env.TON_WALLET).then(() => {
-            ctx.reply(`❗ Обязательно в отделе комментарий напишите: ${ctx.from.id}`).then(() => ctx.reply(`После оплаты введите /checkton`));
-        })
-    })
+    const userId = ctx.from.id;
+    ctx.reply('Введите сумму TON, которую хотите пополнить (например: 0.5):');
+
+    bot.once('text', async (ctx2) => {
+        const input = ctx2.message.text.replace(',', '.');
+        const amount = parseFloat(input);
+
+        if (isNaN(amount) || amount <= 0) {
+            return ctx2.reply('❗ Введите корректное число TON.');
+        }
+
+        const wallet = process.env.TON_WALLET;
+        const url = `ton://transfer/${wallet}?amount=${amount}&text=${userId}`;
+
+        ctx2.reply(`Нажмите кнопку ниже, чтобы пополнить ${amount} TON через Telegram Wallet:
+
+После перевода монеты будут зачислены в течение 1–2 минут.`,
+            Markup.inlineKeyboard([
+                [Markup.button.url(`💳 Пополнить ${amount} TON`, url)]
+            ])
+        );
+    });
 });
 
 bot.command('confirmwithdraw', async (ctx) => {
@@ -327,57 +344,77 @@ bot.command('confirmwithdraw', async (ctx) => {
     }
 });
 
-bot.command('checkton', async (ctx) => {
-    const userId = ctx.from.id;
-    if (checkCooldown(userId, 'checkton', ctx)) return;
-
+// Автоматическая проверка пополнений
+setInterval(async () => {
     try {
-        const response = await fetch(`${process.env.TON_API}/getTransactions?address=${process.env.TON_WALLET}&limit=20`);
-        const data = await response.json();
+        const res = await fetch(`${process.env.TON_API}/getTransactions?address=${process.env.TON_WALLET}&limit=20`);
+        const data = await res.json();
         const txs = data.result;
-        const tx = txs.find(t => t.in_msg?.message?.includes(userId.toString()));
-        if (!tx) return ctx.reply('Перевод не найден.');
 
-        const txHash = tx.transaction_id.hash;
-        const already = await isTxProcessed(userId, txHash);
-        if (already) return ctx.reply('Этот перевод уже был зачислен.');
+        for (const tx of txs) {
+            const comment = tx.in_msg?.message;
+            const userId = parseInt(comment);
+            const txHash = tx.transaction_id.hash;
 
-        const tonAmount = tx.in_msg.value / 1e9;
-        if (tonAmount < 0.1) return ctx.reply('Минимум — 0.1 TON');
+            if (!userId || isNaN(userId)) continue;
 
-        const credit = Math.floor(tonAmount * 1000);
-        const newBalance = await updateBalance(userId, credit);
-        ctx.reply(`Баланс пополнен на ${credit} монет. Текущий: ${newBalance}`);
+            const already = await isTxProcessed(userId, txHash);
+            if (already) continue;
+
+            const tonAmount = tx.in_msg.value / 1e9;
+            if (tonAmount < 0.1) continue;
+
+            const credit = Math.floor(tonAmount * 1000);
+            const newBalance = await updateBalance(userId, credit);
+
+            bot.telegram.sendMessage(userId, `✅ Пополнение успешно! Баланс пополнен на ${credit} монет. Текущий баланс: ${newBalance}`);
+        }
     } catch (e) {
-        console.error(e);
-        ctx.reply('Ошибка при проверке TON.');
+        console.error('Ошибка авто-пополнения:', e);
     }
-});
+}, 30000);
 
+// FSM для вывода средств
 bot.hears('📤 Вывести', (ctx) => {
-    ctx.reply('Введите команду: /withdraw СУММА TON_АДРЕС');
+    const userId = ctx.from.id;
+    withdrawSessions[userId] = { step: 'awaiting_address' };
+    ctx.reply('Введите ваш TON-адрес для вывода:');
 });
 
-bot.command('withdraw', async (ctx) => {
+bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
-    if (checkCooldown(userId, 'withdraw', ctx)) return;
+    const session = withdrawSessions[userId];
+    if (!session) return;
 
-    const parts = ctx.message.text.trim().split(' ');
-    const amount = parseInt(parts[1]);
-    const tonAddress = parts[2];
+    const msg = ctx.message.text.trim();
 
-    if (!amount || !tonAddress) return ctx.reply('Формат: /withdraw СУММА TON_АДРЕС');
+    if (session.step === 'awaiting_address') {
+        if (!/^([A-Z0-9-_]{48,60})$/.test(msg)) {
+            return ctx.reply('❗ Похоже, это не валидный TON-адрес. Попробуйте снова.');
+        }
+        session.tonAddress = msg;
+        session.step = 'awaiting_amount';
+        return ctx.reply('Сколько монет вы хотите вывести?');
+    }
 
-    const balance = await getBalance(userId);
-    if (balance < amount) return ctx.reply('Недостаточно средств.');
+    if (session.step === 'awaiting_amount') {
+        const amount = parseInt(msg);
+        if (isNaN(amount) || amount <= 0) return ctx.reply('❗ Введите корректное число монет.');
 
-    await updateBalance(userId, -amount);
-    ctx.reply(`Заявка на вывод ${amount / 1000} TON принята. Ожидайте перевода в течение 24 часов.`);
+        const balance = await getBalance(userId);
+        if (balance < amount) return ctx.reply('❗ Недостаточно средств на балансе.');
 
-    await bot.telegram.sendMessage(
-        process.env.ADMIN_ID,
-        `📤 Заявка на вывод:\n👤 ${ctx.from.first_name} (${userId})\n💸 ${amount} монет (≈ ${amount / 1000} TON)\n📮 ${tonAddress}`
-    );
+        await updateBalance(userId, -amount);
+
+        ctx.reply(`✅ Заявка на вывод ${amount / 1000} TON создана. Ожидайте перевода в течение 24 часов.`);
+
+        await bot.telegram.sendMessage(
+            process.env.ADMIN_ID,
+            `📤 Новая заявка на вывод:\n👤 ${ctx.from.first_name} (${userId})\n💸 ${amount} монет (≈ ${amount / 1000} TON)\n📮 ${session.tonAddress}`
+        );
+
+        delete withdrawSessions[userId];
+    }
 });
 
 bot.launch();
