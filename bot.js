@@ -25,11 +25,13 @@ const User = model('User', userSchema);
 const TxHash = model('TxHash', txSchema);
 
 async function getBalance(userId) {
+    if (typeof userId === 'string' && userId.startsWith('bot_')) return 0;
     const user = await User.findOne({ userId });
     return user ? user.balance : 0;
 }
 
 async function updateBalance(userId, amount) {
+    if (typeof userId === 'string' && userId.startsWith('bot_')) return 0;
     const user = await User.findOneAndUpdate(
         { userId },
         { $inc: { balance: amount } },
