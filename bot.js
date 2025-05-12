@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const COOLDOWN = {}; // { userId: { command: timestamp } }
 const ROOM_TYPES = { '100': [], '300': [], '500': [], '1000': [] };
+const withdrawSessions = {}; // FSM для вывода
 
 // MongoDB connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -300,28 +301,14 @@ bot.action(/^leave_(.+)$/, (ctx) => {
 
 bot.hears('➕ Пополнить', (ctx) => {
     const userId = ctx.from.id;
-    ctx.reply('Введите сумму TON, которую хотите пополнить (например: 0.5):');
-
-    bot.once('text', async (ctx2) => {
-        const input = ctx2.message.text.replace(',', '.');
-        const amount = parseFloat(input);
-
-        if (isNaN(amount) || amount <= 0) {
-            return ctx2.reply('❗ Введите корректное число TON.');
-        }
-
-        const wallet = process.env.TON_WALLET;
-        const url = `ton://transfer/${wallet}?amount=${amount}&text=${userId}`;
-
-        ctx2.reply(`Нажмите кнопку ниже, чтобы пополнить ${amount} TON через Telegram Wallet:
-
-После перевода монеты будут зачислены в течение 1–2 минут.`,
-            Markup.inlineKeyboard([
-                [Markup.button.url(`💳 Пополнить ${amount} TON`, url)]
-            ])
-        );
-    });
-});
+    ctx.reply(`💳 TON-адрес для пополнения:`).then(() => {
+        ctx.reply(`${process.env.TON_WALLET}`).then(() => {
+            ctx.reply(`Важно❗\nВ комментарии к переводу обязательно укажите ваш ID: \`${userId}\``, { parse_mode: 'Markdown' }).then(() => {
+                ctx.reply(`⏳ После перевода средства поступят в течение *2–3 минут*.`);
+            })
+        })
+    })
+})
 
 bot.command('confirmwithdraw', async (ctx) => {
     if (ctx.from.id.toString() !== process.env.ADMIN_ID) return ctx.reply('⛔ Только администратор может использовать эту команду.');
@@ -381,15 +368,31 @@ bot.hears('📤 Вывести', (ctx) => {
     ctx.reply('Введите ваш TON-адрес для вывода:');
 });
 
+function isValidTonAddress(address) {
+    // Проверка длины (48 символов base64url)
+    if (typeof address !== 'string' || address.length !== 48) return false;
+  
+    // Проверка на допустимые символы base64url
+    const base64urlRegex = /^[A-Za-z0-9_-]+$/;
+    if (!base64urlRegex.test(address)) return false;
+  
+    // Адреса в TON обычно начинаются с EQ (externally owned) или UQ (smart contract)
+    if (!address.startsWith('EQ') && !address.startsWith('UQ')) return false;
+  
+    return true;
+  }
+
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
+
+    // Обработка FSM вывода (оставляем как есть)
     const session = withdrawSessions[userId];
     if (!session) return;
 
     const msg = ctx.message.text.trim();
 
     if (session.step === 'awaiting_address') {
-        if (!/^([A-Z0-9-_]{48,60})$/.test(msg)) {
+        if (!isValidTonAddress(msg)) {
             return ctx.reply('❗ Похоже, это не валидный TON-адрес. Попробуйте снова.');
         }
         session.tonAddress = msg;
