@@ -281,7 +281,7 @@ bot.action(/^leave_(.+)$/, (ctx) => {
 bot.hears('➕ Пополнить', (ctx) => {
     ctx.reply(`Переведите TON на адрес:`).then(() => {
         ctx.reply(process.env.TON_WALLET).then(() => {
-            ctx.reply(`❗❗ Обязательно в отделе комментарий напишите: ${ctx.from.id}`).then(() => ctx.reply(`После оплаты введите /checkton`));
+            ctx.reply(`❗ Обязательно в отделе комментарий напишите: ${ctx.from.id}`).then(() => ctx.reply(`После оплаты введите /checkton`));
         })
     })
 });
