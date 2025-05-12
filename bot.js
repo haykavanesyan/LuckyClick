@@ -216,6 +216,11 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
                     }, 30000);
                 }
             }, 10000);
+
+            // Уведомления за 3, 2, 1 секунду с иконкой звука
+            setTimeout(() => notifyRoomPlayers(room, `[${room.id}] 🔔 Осталось: 3 сек`), 27000);
+            setTimeout(() => notifyRoomPlayers(room, `[${room.id}] 🔔 Осталось: 2 сек`), 28000);
+            setTimeout(() => notifyRoomPlayers(room, `[${room.id}] 🔔 Осталось: 1 сек`), 29000);
         } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
             room.timerStarted = true;
             notifyRoomPlayers(room, `[${room.id}] Игра началась! 30 сек до завершения ставок!`);
