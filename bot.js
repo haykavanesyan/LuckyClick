@@ -91,21 +91,29 @@ async function endGame(room) {
     if (greenCount < redCount) { winners = room.green; winColor = 'Green'; }
     else if (redCount < greenCount) { winners = room.red; winColor = 'Red'; }
     else {
-        await Promise.all(room.green.concat(room.red).map(id => updateBalance(id, room.stake)));
+        await Promise.all(room.green.concat(room.red)
+            .filter(id => !id.toString().startsWith('bot_'))
+            .map(id => updateBalance(id, room.stake)));
         notifyRoomPlayers(room, `[${room.id}] Ничья! Ставки возвращены.`);
         return resetRoom(room);
     }
 
     const reward = Math.floor(rewardPool / (winners.length || 1));
-    await Promise.all(winners.map(id => updateBalance(id, reward)));
-    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.length || 1}`);
+    await Promise.all(winners
+        .filter(id => !id.toString().startsWith('bot_'))
+        .map(id => updateBalance(id, reward)));
+    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length}`);
     resetRoom(room);
 }
 
 function resetRoom(room) {
     room.green = [];
     room.red = [];
-    room.joined.forEach(id => bot.telegram.sendMessage(id, `Вы покинули комнату [${room.id}].`));
+    room.joined.forEach(id => {
+        if (!id.toString().startsWith('bot_')) {
+            bot.telegram.sendMessage(id, `Вы покинули комнату [${room.id}].`);
+        }
+    });
     room.joined = [];
     room.inProgress = false;
     room.timeout = null;
