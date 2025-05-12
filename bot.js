@@ -201,6 +201,25 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
     );
 });
 
+function startRoomTimer(room) {
+    room.timerStarted = true;
+    room.endTime = Date.now() + 30000;
+
+    notifyRoomPlayers(room, `[${room.id}] Игра началась! 30 сек до завершения ставок!`);
+
+    // Обратный отсчёт с 5 до 1
+    [5, 4, 3, 2, 1].forEach((sec) => {
+        setTimeout(() => {
+            notifyRoomPlayers(room, `⏳ Осталось ${sec} секунд${sec === 1 ? 'a' : sec >= 2 && sec <= 4 ? 'ы' : ''} на ставку!`);
+        }, 30000 - sec * 1000);
+    });
+
+    room.timeout = setTimeout(() => {
+        room.inProgress = true;
+        endGame(room);
+    }, 30000);
+}
+
 ['100', '300', '500', '1000'].forEach(stake => {
     bot.action(`join_${stake}`, async (ctx) => {
         const userId = ctx.from.id;
@@ -216,8 +235,17 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
             ])
         );
 
+        if (room.timerStarted && !room.inProgress) {
+            const remaining = Math.ceil((room.endTime - Date.now()) / 1000);
+            if (remaining > 0) {
+                await bot.telegram.sendMessage(userId, `[${room.id}] Игра уже началась! Осталось ${remaining} секунд на ставку.`);
+            }
+            return await ctx.deleteMessage();
+        }
+
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
             await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
+
             setTimeout(() => {
                 if (room.joined.length < 3 && !room.inProgress) {
                     const bot1 = `bot_${Date.now()}_1`;
@@ -227,24 +255,13 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
                     const color2 = Math.random() < 0.5 ? 'green' : 'red';
                     room[color1].push(bot1);
                     room[color2].push(bot2);
-                    notifyRoomPlayers(room, `[${room.id}] Игра началась! 30 сек до завершения ставок!`);
-
-                    room.timerStarted = true;
-                    room.timeout = setTimeout(() => {
-                        room.inProgress = true;
-                        endGame(room);
-                    }, 30000);
+                    startRoomTimer(room);
                 }
             }, 10000);
-
         } else if (room.joined.length >= 3 && !room.inProgress && !room.timerStarted) {
-            room.timerStarted = true;
-            notifyRoomPlayers(room, `[${room.id}] Игра началась! 30 сек до завершения ставок!`);
-            room.timeout = setTimeout(() => {
-                room.inProgress = true;
-                endGame(room);
-            }, 30000);
+            startRoomTimer(room);
         }
+
         await ctx.deleteMessage();
     });
 });
