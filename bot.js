@@ -144,7 +144,9 @@ bot.start(async (ctx) => {
         ]).resize()
     );
 
-    ctx.reply(`🎉 Поздравляем, Вы получили 100 монет за первый вход.`);
+    if (!exists) {
+        ctx.reply(`🎉 Поздравляем, Вы получили 100 монет за первый вход.`);
+    }
 });
 
 bot.hears('⚙️ Помощь', (ctx) => {
@@ -373,16 +375,16 @@ bot.hears('📤 Вывести', (ctx) => {
 function isValidTonAddress(address) {
     // Проверка длины (48 символов base64url)
     if (typeof address !== 'string' || address.length !== 48) return false;
-  
+
     // Проверка на допустимые символы base64url
     const base64urlRegex = /^[A-Za-z0-9_-]+$/;
     if (!base64urlRegex.test(address)) return false;
-  
+
     // Адреса в TON обычно начинаются с EQ (externally owned) или UQ (smart contract)
     if (!address.startsWith('EQ') && !address.startsWith('UQ')) return false;
-  
+
     return true;
-  }
+}
 
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
