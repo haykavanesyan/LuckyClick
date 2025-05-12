@@ -264,7 +264,7 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
 
         await updateBalance(userId, -room.stake);
         room[color].push(userId);
-        ctx.reply(`[${room.id}] Ставка принята: ${color}`);
+        ctx.reply(`[${room.id}] Ставка принята: ${color === 'green' ? '🟢 Зелёная' : '🔴 Красная'}`);
     });
 });
 
