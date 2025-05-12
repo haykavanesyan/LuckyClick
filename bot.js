@@ -127,7 +127,7 @@ bot.start(async (ctx) => {
     // если пользователь отсутствует — создаём с балансом 0
     const exists = await User.exists({ userId });
     if (!exists) {
-        await User.create({ userId, balance: 0 });
+        await User.create({ userId, balance: 100 });
     }
 
     ctx.reply(`
@@ -142,6 +142,8 @@ bot.start(async (ctx) => {
             ['📜 Правила', '⚙️ Помощь']
         ]).resize()
     );
+
+    ctx.reply(`🎉 Поздравляем, Вы получили 100 монет за первый вход.`);
 });
 
 bot.hears('⚙️ Помощь', (ctx) => {
