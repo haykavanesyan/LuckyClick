@@ -121,7 +121,15 @@ function resetRoom(room) {
 }
 
 // Бот
-bot.start((ctx) => {
+bot.start(async (ctx) => {
+    const userId = ctx.from.id;
+
+    // если пользователь отсутствует — создаём с балансом 0
+    const exists = await User.exists({ userId });
+    if (!exists) {
+        await User.create({ userId, balance: 0 });
+    }
+
     ctx.reply(`
 🎮 Добро пожаловать в LuckyClick!
 🎯 Выбирай сторону и зарабатывай монеты, которые можно вывести в TON.
