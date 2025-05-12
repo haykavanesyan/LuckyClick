@@ -203,7 +203,6 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
 
 ['100', '300', '500', '1000'].forEach(stake => {
     bot.action(`join_${stake}`, async (ctx) => {
-        await ctx.deleteMessage();
         const userId = ctx.from.id;
         const room = findAvailableRoom(stake);
         if (room.joined.includes(userId)) return ctx.answerCbQuery('Вы уже в этой комнате');
@@ -246,12 +245,12 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
                 endGame(room);
             }, 30000);
         }
+        await ctx.deleteMessage();
     });
 });
 
 ['green', 'red'].forEach(color => {
     bot.action(new RegExp(`^bet_${color}_(.+)$`), async (ctx) => {
-        await ctx.deleteMessage();
         const userId = ctx.from.id;
         const roomId = ctx.match[1];
         const stake = roomId.split('_')[0];
@@ -267,6 +266,7 @@ bot.hears('🟢 Войти в комнату', (ctx) => {
         await updateBalance(userId, -room.stake);
         room[color].push(userId);
         ctx.reply(`[${room.id}] Ставка принята: ${color === 'green' ? '🟢 Зелёная' : '🔴 Красная'}`);
+        await ctx.deleteMessage();
     });
 });
 
