@@ -102,7 +102,7 @@ async function endGame(room) {
     await Promise.all(winners
         .filter(id => !id.toString().startsWith('bot_'))
         .map(id => updateBalance(id, reward)));
-    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor === 'Green' ? '🟢 Зелёная' : '🔴 Красная'}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length}`);
+    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor === 'Green' ? '🟢 Зелёная' : '🔴 Красная'}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length || 1}`);
     resetRoom(room);
 }
 
@@ -245,7 +245,6 @@ function startRoomTimer(room) {
 
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
             await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
-
             setTimeout(() => {
                 if (room.joined.length < 3 && !room.inProgress) {
                     const bot1 = `bot_${Date.now()}_1`;
