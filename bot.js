@@ -102,7 +102,7 @@ async function endGame(room) {
     await Promise.all(winners
         .filter(id => !id.toString().startsWith('bot_'))
         .map(id => updateBalance(id, reward)));
-    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length}`);
+    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor === 'Green' ? '🟢 Зелёная' : '🔴 Красная'}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length}`);
     resetRoom(room);
 }
 
