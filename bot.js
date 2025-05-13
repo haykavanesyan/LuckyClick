@@ -255,7 +255,6 @@ function startRoomTimer(room) {
 
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
             await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
-            await bot.telegram.sendMessage(userId, `[${room.id}] Делайте вашу ставку!`);
             setTimeout(() => {
                 if (room.joined.length < 3 && !room.inProgress) {
                     const bot1 = `bot_${Date.now()}_1`;
