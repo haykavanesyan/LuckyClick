@@ -401,7 +401,7 @@ bot.on('text', async (ctx) => {
         }
         session.tonAddress = msg;
         session.step = 'awaiting_amount';
-        return ctx.reply('Сколько монет вы хотите вывести?');
+        return ctx.reply('Сколько монет вы хотите вывести? - (Минимум: 500)');
     }
 
     if (session.step === 'awaiting_amount') {
