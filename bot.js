@@ -225,6 +225,7 @@ function startRoomTimer(room) {
 
 ['100', '300', '500', '1000'].forEach(stake => {
     bot.action(`join_${stake}`, async (ctx) => {
+        let waitingPlayersMessage
         const userId = ctx.from.id;
         const room = findAvailableRoom(stake);
         if (room.joined.includes(userId)) return ctx.answerCbQuery('Вы уже в этой комнате');
@@ -242,12 +243,13 @@ function startRoomTimer(room) {
             const remaining = Math.ceil((room.endTime - Date.now()) / 1000);
             if (remaining > 0) {
                 await bot.telegram.sendMessage(userId, `[${room.id}] Игра уже началась! Осталось ${remaining} секунд на ставку.`);
+                await bot.telegram.deleteMessage(userId, waitingMessage.message_id).catch(() => {});
             }
             return await ctx.deleteMessage();
         }
 
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
-            await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
+            waitingPlayersMessage = await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
             await bot.telegram.sendMessage(userId, `[${room.id}] Делайте вашу ставку!`);
             setTimeout(() => {
                 if (room.joined.length < 3 && !room.inProgress && (room.green.length || room.red.length)) {
@@ -256,7 +258,7 @@ function startRoomTimer(room) {
                     room.joined.push(bot1, bot2);
                     const color1 = Math.random() < 0.5 ? 'green' : 'red';
                     const color2 = Math.random() < 0.5 ? 'green' : 'red';
-                    if (room.joined.length === 2) {
+                    if (room.joined.length == 2) {
                         room[color1].push(bot1);
                     } else {
                         room[color1].push(bot1);
