@@ -103,7 +103,7 @@ async function endGame(room) {
     await Promise.all(winners
         .filter(id => !id.toString().startsWith('bot_'))
         .map(id => updateBalance(id, reward)));
-    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor === 'Green' ? '🟢 Зелёная' : '🔴 Красная'}. Выигрыш: ${reward} монет каждому. Победителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length || 1}`);
+    notifyRoomPlayers(room, `[${room.id}] Победила команда ${winColor === 'Green' ? '🟢 Зелёная' : '🔴 Красная'}.\nВыигрыш: ${reward} монет каждому.\nИгроков в комнате: ${room.green.length + room.red.length}\nПобедителей: ${winners.filter(id => !id.toString().startsWith('bot_')).length || 1}`);
     resetRoom(room);
 }
 
@@ -248,15 +248,20 @@ function startRoomTimer(room) {
 
         if (room.joined.length < 3 && !room.inProgress && !room.timerStarted) {
             await bot.telegram.sendMessage(userId, `[${room.id}] Ожидаем других игроков. Нужно хотя бы 3 участника.`);
+            await bot.telegram.sendMessage(userId, `[${room.id}] Делайте вашу ставку!`);
             setTimeout(() => {
-                if (room.joined.length < 3 && !room.inProgress) {
+                if (room.joined.length < 3 && !room.inProgress && (room.green.length && room.red.length)) {
                     const bot1 = `bot_${Date.now()}_1`;
                     const bot2 = `bot_${Date.now()}_2`;
                     room.joined.push(bot1, bot2);
                     const color1 = Math.random() < 0.5 ? 'green' : 'red';
                     const color2 = Math.random() < 0.5 ? 'green' : 'red';
-                    room[color1].push(bot1);
-                    room[color2].push(bot2);
+                    if (room.joined.length === 2) {
+                        room[color1].push(bot1);
+                    } else {
+                        room[color1].push(bot1);
+                        room[color2].push(bot2);
+                    }
                     startRoomTimer(room);
                 }
             }, 10000);
