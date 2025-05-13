@@ -410,6 +410,7 @@ bot.on('text', async (ctx) => {
 
         const balance = await getBalance(userId);
         if (balance < amount) return ctx.reply('❗ Недостаточно средств на балансе.');
+        if (amount < 500) return ctx.reply('❗ Минимальное количество вывода: 500 монет.');
 
         await updateBalance(userId, -amount);
 
